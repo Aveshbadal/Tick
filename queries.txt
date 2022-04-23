@@ -1,0 +1,202 @@
+Run the cell below to generate randomized quote and trade tables. These will be used for the exercises below
+
+trade:([]time:`time$();sym:`symbol$();size:`long$();price:`long$();side:`symbol$();exchange:`symbol$())
+
+quote:([]time:`time$();sym:`symbol$();bid:`long$();ask:`long$();bidSize:`long$();askSize:`long$();exchange:`symbol$())
+
+randQuote:{`quote insert(rand .z.t;rand`JPM`GE`BP`MSFT;1+rand 10000;1+rand 10000;1+rand 10000;1+rand 10000;rand`N`L`T)}
+
+randTrade:{`trade insert(rand .z.t;rand`JPM`GE`BP`MSFT;1+rand 10000;1+rand 10000;rand`B`S;rand`N`L`T)}
+
+do[10000;randQuote[]]
+
+do[10000;randTrade[]]
+
+
+Extracting useful insights from the tables
+
+The below questions make use of the trade and quote tables that we have generated in the initialization cell. The cell below provides a preview of what the tables look like.
+
+tables[]!count each value each tables[]
+
+10#trade 
+
+10#quote
+
+    Select all trades for microsoft , with a price less than or equal to 200.
+
+		select from trade where sym=`MSFT, price <= 200
+
+
+
+    Select the last trade price for each sym in hourly buckets
+
+		select last price by hour:60 xbar time.minute, sym from trade
+
+	
+
+    Select the max and min askSize in the quote table for each exchange in 2 hour buckets, excluding JPM
+
+		select maxAskSize:max askSize, minAskSize:min askSize by exchange, hour:120 xbar time.minute from quote where sym<>`JPM
+
+	
+
+    Calculate the daily spread (average bid-ask) for JPM and BP (using the quote table)
+
+		select spread:avg bid-ask by sym from quote where sym in `JPM`BP
+
+	//your answer here 
+
+    Return all trade records where the size is greater than the average trade size for that sym
+
+		select from trade where size>(avg;size)fby sym
+
+//your answer here 
+
+    Return trade records with the maximum price, per symbol and per exchange
+
+		`sym`exchange xkey `sym xasc select from trade where price=(max;price) fby ([]sym;exchange)
+
+//no need to key or sort, but included here in the solution for clarity
+
+//your answer here
+
+Executing qSQL queries in user-defined functions
+
+    Create a function filterOnSym which takes two arguments:
+        a table name
+        a sym
+
+    returns all the records in the table for the given sym
+
+    Example:
+
+    filterOnSym[trade;`JPM]
+
+time 	sym 	size 	price 	side 	exchange
+12:32:03.857 	JPM 	7346 	9114 	B 	T
+05:10:03.082 	JPM 	6900 	5248 	B 	T
+12:34:47.726 	JPM 	6110 	5758 	B 	L
+08:48:23.372 	JPM 	6263 	1589 	B 	L
+07:19:31.172 	JPM 	8814 	9056 	S 	L
+00:34:26.343 	JPM 	6772 	5569 	S 	N
+10:50:24.214 	JPM 	7320 	9936 	B 	N
+
+filterOnSym:{[t;s] select from t where sym in s}
+
+//your answer here 
+
+Now test your code output on your different tables.
+
+filterOnSym[trade;`JPM]   
+
+filterOnSym[quote;`GE]   
+
+    Create a function getVolumeForSym which has one argument:
+        sym - can be one sym or a list of syms
+
+    returns the total size per sym from the trade table
+
+    Example:
+
+    getVolumeForSym[`JPM]
+
+sym 	size
+JPM 	1234567
+
+getVolumeForSym:{[s] select sum size by sym from trade where sym in s} 
+
+//your answer here 
+
+//test your function
+
+getVolumeForSym[`JPM]
+
+getVolumeForSym[`JPM`GE]
+
+    Create a similar function getVWAPForSym which has one argument:
+        sym - can be one sym or a list of syms
+
+    returns the volume weighted average price (VWAP) per sym from the trade table
+
+    Example:
+
+    getVWAPForSym[`JPM]
+
+sym 	vwap
+JPM 	1234.456
+
+getVWAPForSym:{[s] select vwap:size wavg price by sym from trade where sym in s}  
+
+//your answer here 
+
+//test your function
+
+getVWAPForSym[`JPM]
+
+getVWAPForSym[`JPM`MSFT]
+
+    Create a function getTradeTimeSeries which has one argument:
+        sym - can be one sym or a list of syms
+
+    returns the sorted list (using exec) of times when trades where executed per sym
+
+    Example:
+
+    getTradeTimeSeries[`JPM]
+
+`s#00:00:25.822 00:01:40.188 00:01:44.587 00:02:25.536 00:03:10.884...
+
+getTradeTimeSeries:{[s] asc exec time from trade where sym in s}
+
+//your answer here
+
+//test your function
+
+getTradeTimeSeries[`JPM]
+
+getTradeTimeSeries[`GE`JPM]
+
+Extracting Tables
+
+    Generate a NBBO table from your quote table, this is the best bid (bigger is better) and ask (smaller is better) on a daily basis broken down by sym and 1 minutes intervals. The final table should have a time column that is of time type.
+
+    Sample output:
+
+sym time 	ask bid
+BP 00:00:00.000 	2491 9124
+BP 00:01:00.000 	855 5335
+BP 00:02:00.000 	9008 5407
+BP 00:03:00.000 	2399 9032
+BP 00:04:00.000 	5007 6692
+BP 00:06:00.000 	2505 576
+BP 00:07:00.000 	8666 1956
+BP 00:08:00.000 	8151 8479
+
+show nbbo:select ask: min ask,bid: max bid 
+
+                by sym,time:`time$time.minute     
+
+                from quote 
+
+                where askSize>0,bidSize>0
+
+count nbbo   //should have less nbbo records than quote records!
+
+count quote
+
+//your answer here 
+
+Modifying Tables
+
+    The price from the T exchange was given to us in the wrong currency. Update the price column in the trade table so that it is now 0.78 times the previous price. Use pass-by-name to update the table in memory.
+
+Note: the price column is a list of integers
+
+update `int$price*0.78 from `trade where exchange in `T
+
+// your answer here
+
+    All quotes after 15:00:00 have been invalidated by a bug in the system in the L exchange. Remove them from the quote table
+
+delete from quote where exchange=`L, time>15:00:00
